@@ -1,5 +1,10 @@
 # Arc Network — Pesquisa técnica e ideias de projeto
 
+> **Para implementar:** ver [`docs/ARC-TECH-REFERENCE.md`](docs/ARC-TECH-REFERENCE.md) —
+> config de rede, a dualidade do USDC e o pre-flight check de saldo que ela exige, setup de
+> viem/wagmi/Foundry, ERC-20, arquitetura de privacidade, ERC-8183, Gateway, custo de gas
+> medido, oráculos, e a lista de conflitos entre fontes.
+
 Documento de trabalho para submissão ao programa de builders da Arc (Office Hours / cargo
 Builder no Discord). Contém o levantamento técnico da rede e 6 ideias de projeto avaliadas
 por viabilidade real, não por "hype".
