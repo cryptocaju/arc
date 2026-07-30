@@ -276,11 +276,64 @@ testnet   https://gateway-api-testnet.circle.com/v1/
 mainnet   https://gateway-api.circle.com/v1/
 ```
 
-Conceitos: *burn intent*, *unified balance*, `gatewayMint`, delegates.
+### 8.1 Saldo unificado — é abstração contábil, não mágica
 
-Alternativa: **CCTP** (domínio da Arc = `26`) via Bridge Kit, que faz approve + burn +
-atestação + mint numa chamada `kit.bridge()`. Gateway exige depósito prévio mas dá UX melhor;
-CCTP não exige depósito mas é mais lento.
+Gateway soma seus depósitos de USDC de todas as chains num saldo único. **Os tokens continuam
+em chains específicas.** Consequência prática: **todo transfer exige `sourceDomain` e
+`destinationDomain`**, mesmo o saldo parecendo unificado. Pense em conta multimoeda: você vê um
+total, mas o saque sai de uma posição específica.
+
+### 8.2 Fluxo de transferência
+
+1. **Deposit** — usuário deposita USDC no Gateway Wallet em qualquer chain (entra no saldo).
+2. **Burn intent** — informa source domain, destination domain, destinatário e valor.
+3. **Assinar** — **EIP-712** para origem EVM, **Ed25519** para origem Solana.
+4. **Submeter à Gateway API** — POST do burn intent, recebe a atestação.
+5. **Mint no destino** — chama `gatewayMint` com a atestação na chain de destino.
+
+Consulta de saldo: `POST /balances`.
+
+### 8.3 Domain IDs
+
+**Arc Testnet = `26`.** Outros (testnet e mainnet compartilham a numeração): Ethereum `0`,
+Avalanche `1`, OP `2`, Arbitrum `3`, Solana `5`, Base `6`, Polygon PoS `7`, Unichain `10`,
+Sonic `13`, World Chain `14`, Sei `16`, HyperEVM `19`.
+
+### 8.4 Armadilhas que causam perda de fundos ou assinatura inválida
+
+- **Nunca altere** definições de tipo EIP-712, domain separators, struct hashes ou payloads de
+  assinatura das referências. Mudar nome, tipo ou **ordem** de campo — ou omitir um — gera
+  assinatura inválida.
+- **Solana:** `destinationRecipient` tem que ser uma **token account de USDC (ATA)**, nunca o
+  endereço bruto da carteira. Derivar uma ATA a partir de um endereço que **já é** token
+  account causa **perda permanente de fundos**. Cheque com `getAccount()` antes.
+- **Solana:** burn intents precisam do payload prefixado com **16 bytes** (`0xff` + 15 zeros)
+  antes de assinar em Ed25519.
+- **Solana:** só o **Solflare** assina mensagens arbitrárias para burn intent. Phantom e a
+  maioria dos outros recusam.
+- `parseUnits(amount, 6)` sempre.
+
+### 8.5 Gateway ou CCTP?
+
+| Situação | Usar |
+|---|---|
+| Transferência instantânea (<500ms), saldo unificado, eficiência de capital entre chains | **Gateway** |
+| Transferência ponto a ponto, esporádica ou avulsa | **CCTP / Bridge Kit** |
+
+CCTP faz approve + burn + atestação + mint numa chamada `kit.bridge()` e **suporta mais chains**
+que o Gateway. Gateway exige depósito prévio; CCTP não, mas é mais lento.
+
+### 8.6 Arquivos de referência de implementação
+
+O repo tem um arquivo por cenário em `use-gateway/references/`, roteados por (1) modelo de
+carteira — self-managed ou Circle Wallets, (2) família da origem, (3) família do destino:
+`deposit-evm.md`, `deposit-evm-browser-wallet.md`, `deposit-evm-circle-wallet.md`,
+`deposit-solana.md`, `evm-to-evm.md`, `evm-to-evm-browser-wallet.md`,
+`transfer-evm-circle-wallet.md`, `transfer-evm-delegate.md`, `evm-to-solana.md`,
+`solana-to-evm.md`, `solana-to-solana.md`, `query-balance.md`.
+
+`transfer-evm-delegate.md` é exceção estreita (depositante SCA que assina burn intent por um
+delegate EOA) — não use no fluxo comum.
 
 ---
 
