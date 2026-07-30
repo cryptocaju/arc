@@ -1,5 +1,9 @@
 # Arc Network — Pesquisa técnica e ideias de projeto
 
+> **Em linguagem simples:** ver [`docs/IDEIAS-MUNDO-REAL.md`](docs/IDEIAS-MUNDO-REAL.md) —
+> 5 ideias partindo de situações do dia a dia (caução de aluguel, caixinha entre amigos,
+> freelance internacional, gorjeta, mensalidade), sem jargão. **Comece por aí.**
+>
 > **Para implementar:** ver [`docs/ARC-TECH-REFERENCE.md`](docs/ARC-TECH-REFERENCE.md) —
 > config de rede, a dualidade do USDC e o pre-flight check de saldo que ela exige, setup de
 > viem/wagmi/Foundry, ERC-20, arquitetura de privacidade, ERC-8183, Gateway, custo de gas
