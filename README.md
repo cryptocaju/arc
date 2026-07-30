@@ -107,6 +107,10 @@ longo do tempo e paga spread para um balcão em cada conversão. Ninguém oferec
 **Por que Arc.** Requer muitos reposicionamentos de ordem por dia → só fecha a conta com
 taxa estável em dólar. E USDC/EURC é o par nativo da rede.
 
+**Números (§4.4).** Recolocamento a ~150k de gas = **~0,025 USDC**. Posição de US$ 10k
+capturando 5 bps por fill (US$ 5) → gas é **~0,5% da captura**, e é um valor fixo em dólar.
+Coloque essa conta no pitch: é a diferença entre "acho que dá" e "aqui está a planilha".
+
 **Arquitetura.**
 - `LadderVault.sol` — cofre ERC-4626 que aceita depósito nos dois lados do par.
 - `StableCLOB.sol` — livro de ordens limitadas minimalista para um único par, com ticks em
@@ -150,19 +154,22 @@ pagamento de avaliador em USDC, com custo por atestação previsível.
   slashado.
 - `ReputationSPB.sol` — reputação derivada só do histórico on-chain (jobs, taxa de acerto,
   volume). Sem admin, sem score arbitrário.
-- Adapter que expõe a interface de avaliador que o ERC-8183 espera, para plugar em jobs
-  existentes sem fork do padrão.
-- Demo: 2 agentes (um contrata, um entrega) + 3 avaliadores, rodando o ciclo completo.
+- `CommitteeHook.sol` — **entra como o `hook` do `createJob`** (§4.2). É isto que torna o
+  projeto plugável: qualquer pessoa passa o endereço do seu hook e ganha avaliação por
+  comitê, sem fork do padrão e sem sua permissão.
+- Demo: 2 agentes (um contrata, um entrega) + 3 avaliadores, rodando o ciclo completo contra
+  a implementação de referência já deployada.
 
-**MVP.** Registry + commit-reveal + slashing + um job real end-to-end.
+**MVP.** Registry + commit-reveal + slashing + hook + um job real end-to-end.
 
 **Esforço.** 3–4 semanas. Contratos são o núcleo; a UI pode ser mínima.
 
 **Diferencial.** Alto. Todo mundo está construindo *agentes*; quase ninguém está
 construindo o **julgamento** que faz o escrow do agente ser confiável.
 
-**Risco.** Você precisa dos endereços do registry ERC-8183 na testnet da Arc — confirmar na
-doc (§4). Se não houver deploy oficial, deploye a referência do padrão você mesmo.
+**Risco.** Baixou bastante depois da §4.2: a referência já está na testnet e o `hook` é um
+ponto de extensão oficial. Resta confirmar o endereço no explorer e ler a interface esperada
+do hook (quais callbacks, em que estados do job são chamados).
 
 ---
 
@@ -206,8 +213,13 @@ Factoring tradicional cobra caro e leva dias. On-chain, a fatura é um fluxo de 
 verificável — logo, colateral.
 
 **Por que Arc.** É literalmente o público da Arc (pagamentos B2B institucionais).
-Privacidade opt-in resolve o bloqueio real de adoção: **nenhuma empresa quer publicar seus
-termos comerciais e sua lista de clientes num explorer público.**
+
+**Correção após §4.1.** Eu havia justificado esta ideia com "nenhuma empresa quer publicar
+sua lista de clientes". Isso está **errado** para a fase 1 da privacidade da Arc: endereços
+de remetente e destinatário **continuam visíveis** por design; só o *valor* é cifrado. Então
+o que você consegue esconder é **quanto** foi faturado e com **que desconto** a fatura foi
+antecipada — não *de quem*. Ainda é relevante (margem e termos comerciais são sensíveis), mas
+é uma alegação bem mais modesta. Não venda privacidade de contraparte nesta ideia.
 
 **Arquitetura.**
 - `Invoice.sol` — ERC-721 representando a fatura: sacado, valor, vencimento, hash do
@@ -261,9 +273,10 @@ está anunciando; construir o lado *permissionless* dele é complementar, não c
 **Diferencial.** Muito alto. Praticamente ninguém constrói derivativos de câmbio entre
 stablecoins — todo mundo faz perp de BTC/ETH.
 
-**Risco.** Depende de oráculo de EUR/USD na testnet da Arc. Confirmar quais provedores estão
-disponíveis (§4); se nenhum, um oráculo assinado próprio serve para a demo, declarado como
-tal.
+**Risco.** Reduzido pela §4.3: Chainlink, Pyth e RedStone estão documentados na Arc, e Pyth e
+RedStone cobrem FX explicitamente. Falta só confirmar o feed id de EUR/USD na testnet — Pyth
+em modo *pull* é a aposta mais segura. Se faltar, um oráculo assinado próprio serve para a
+demo, declarado como tal.
 
 ---
 
@@ -287,45 +300,141 @@ auditabilidade preservada. É o uso mais direto do diferencial menos explorado d
 
 **MVP.** Ancoragem + geração + verificação de um recibo.
 
-**Esforço.** 2–3 semanas — **se** a camada de privacidade tiver API utilizável na testnet.
-Sem isso, cai para prova de Merkle sobre eventos públicos, o que ainda é útil mas perde a
-graça.
+**Esforço.** 2–3 semanas.
 
-**Diferencial.** Alto e muito alinhado ao discurso institucional da Arc.
+**Reavaliação após §4.1 — leia antes de escolher esta.** A privacidade existe e tem API
+(precompile APS, `globalPublicKey`, `executePrivateTx`, `PrivateTx` assinada em EIP-712), o
+que é bom. Mas **view keys já são um primitivo nativo da rede** — ou seja, a parte
+criptográfica da "divulgação seletiva" a Arc já te dá de graça. O que sobra para você
+construir é o *workflow*: geração de recibo, UX de verificação para o auditor, exportação
+contábil. Isso é trabalho legítimo e útil, mas é **ferramenta em volta de um primitivo
+existente**, não um primitivo novo — e portanto um sinal técnico mais fraco que as Ideias 2
+ou 5 para efeito de candidatura a builder.
 
-**Risco.** O maior da lista: dependência direta de uma feature cuja superfície eu não pude
-verificar. **Confirme antes de escolher esta.**
+Escolha esta se o seu diferencial for produto e UX de compliance, não profundidade de
+protocolo. E o risco continua sendo o maior da lista: é a ideia mais acoplada a uma feature
+cuja superfície exata eu não pude ler na doc.
 
 ---
 
-## 4. O que confirmar na doc antes de decidir
+## 4. Perguntas abertas — respostas obtidas
 
-Não consegui acessar `docs.arc.network` neste ambiente (bloqueio de rede). Verificar:
+Os domínios `docs.arc.io`, `docs.arc.network`, `community.arc.io` e `developers.circle.com`
+estão bloqueados pela política de egresso do ambiente onde esta pesquisa foi feita. O que
+segue foi recuperado por busca e por repositórios públicos no GitHub. **Confirme os
+endereços na doc antes de escrever código contra eles.**
 
-1. **Privacidade opt-in**: existe precompile/contrato de sistema? Está ativo na testnet?
-   Qual a API? → decide se as Ideias 4 (v2) e 6 são viáveis.
-2. **ERC-8183**: existe registry/escrow oficial deployado na testnet? Endereços? → Ideia 2.
-   Ponto de partida: tutorial "Create your first ERC-8183 job" na doc.
-3. **Oráculos**: quais provedores de preço estão na testnet, e existe feed EUR/USD? → Ideia 5.
-4. **StableFX**: há alguma interface de leitura (cotações) acessível sem KYB? Se sim, dá
-   para usar como referência de preço nas Ideias 1 e 5.
-5. **Paymaster**: qual paymaster está disponível na testnet para patrocinar gas? → melhora a
-   UX de todas as ideias (usuário sem saldo consegue transacionar).
-6. **Sample Applications** na doc: ler antes de começar, para não construir algo que já
-   existe como exemplo oficial.
+### 4.1 Privacidade opt-in — RESPONDIDO, com uma ressalva que muda o escopo
+
+Arquitetura: contratos falam com o backend criptográfico via **precompiles**. O backend
+inicial usa **TEE** (Trusted Execution Environment), com MPC/FHE/ZK plugáveis depois.
+
+Fluxo concreto, pelo whitepaper de privacidade:
+
+1. Cliente pede `globalPublicKey` ao **precompile APS**, que encaminha ao **pEVM** e devolve
+   a chave pública global (X-Wing KEM).
+2. Cliente cifra a calldata e despacha via `executePrivateTx`.
+3. Dentro do enclave: decapsula, decifra com AES-256-GCM, verifica a assinatura EIP-712 da
+   struct `PrivateTx` para recuperar o `msg.sender`, e executa o CALL confidencial.
+4. **View keys** dão leitura controlada a auditor/regulador.
+
+**A ressalva importante.** A fase 1 entrega **transferências confidenciais: o *valor* é
+cifrado, mas endereços de remetente e destinatário permanecem visíveis** (proposital, para
+compatibilidade com ferramentas de analytics/monitoramento).
+
+Consequência direta: **a justificativa que eu dei para a Ideia 4 estava errada.** Não dá
+para esconder "quem são seus clientes" hoje — só quanto você cobrou de cada um. Ver a
+correção na Ideia 4 abaixo.
+
+### 4.2 ERC-8183 — RESPONDIDO, e melhor do que o esperado
+
+A implementação de referência **já está deployada na Arc testnet**, reportada em
+`0x0747EEf0706327138c69792bF28Cd525089e4583` *(verificar no explorer)*. A assinatura de
+criação de job é:
+
+```solidity
+createJob(
+    address provider,   // quem executa
+    address evaluator,  // quem avalia
+    uint256 expiredAt,  // expiração
+    string  description,
+    address hook        // address(0) = fluxo padrão sem hook
+)
+```
+
+O job nasce no estado `Open`. O cliente precisa ter USDC de testnet para o escrow do budget.
+
+**O parâmetro `hook` é o achado que destrava a Ideia 2.** A camada de avaliadores entra como
+hook — sem fork do padrão, sem pedir permissão a ninguém, plugável em jobs de terceiros. É
+o ponto de integração ideal para infraestrutura de terceiros.
+
+### 4.3 Oráculos — RESPONDIDO em nível de provedor
+
+A doc tem uma página `/arc/tools/oracles` listando **Chainlink, Pyth e RedStone** na Arc.
+Pyth e RedStone ambos cobrem **FX** explicitamente (Pyth: "crypto, equities, FX, metals",
+com modelos pull e push; RedStone: cripto, LSTs, RWAs, fundos tokenizados, FX).
+
+Ou seja, existe caminho para EUR/USD — o que valida as Ideias 1 e 5. **Falta confirmar o
+feed id / endereço específico na testnet.** Pyth em modelo pull é o mais provável de estar
+disponível sem deploy dedicado por chain.
+
+### 4.4 Custo de gas real — dado concreto
+
+De um deploy público de terceiros na Arc testnet: **3.166.394 de gas ≈ 0,522 USDC**, ou seja
+**~1,65 × 10⁻⁷ USDC por unidade de gas** (~0,165 USDC por milhão de gas).
+
+Isso permite calcular a economia da Ideia 1 em vez de torcer por ela. Um recolocamento de
+ordem em ~150k de gas custa **~0,025 USDC (dois centavos e meio)**. Numa posição de US$ 10k
+capturando 5 bps por fill (US$ 5), o gas é **~0,5% da captura**. A estratégia fecha a conta
+com folga confortável — e, principalmente, esse número **não muda** amanhã.
+
+Trate como dado de ordem de grandeza (uma fonte, custo de deploy) e re-meça você mesmo.
+
+### 4.5 Paymaster — PARCIALMENTE respondido
+
+Existe página `/arc/tools/account-abstraction` com plataformas e SDKs para smart accounts,
+session keys, integração de paymaster e patrocínio de transação. Paymasters *enshrined* para
+EURC e outras stablecoins como gas aparecem como **roadmap**, não como disponível hoje.
+Confirmar o que já dá para usar na testnet.
+
+### 4.6 Ainda em aberto
+
+- **StableFX**: se há interface de leitura de cotação sem KYB (serviria de referência de
+  preço nas Ideias 1 e 5).
+- **Sample Applications** (`/arc/references/sample-applications`): ler antes de começar, para
+  não reconstruir um exemplo oficial.
+- Endereços/feed ids exatos de oráculo na testnet.
+
+### 4.7 Nota prática de deploy
+
+Um deploy real na testnet precisou da flag `--legacy` no Foundry:
+
+```bash
+forge script script/Deploy.s.sol:Deploy \
+  --rpc-url https://rpc.testnet.arc.network --broadcast --legacy
+```
+
+Provável ausência de suporte a transação tipo-2 (EIP-1559) nesse caminho. Guarde isso — é o
+tipo de detalhe que custa uma tarde.
 
 ---
 
 ## 5. Recomendação
 
-**Escolha a Ideia 3 (mandatos de débito recorrente) ou a Ideia 2 (avaliadores ERC-8183).**
+**Depois da rodada de verificação da §4, a Ideia 2 passou a ser a primeira escolha.**
 
-- **Ideia 3** se o objetivo é chegar rápido ao Office Hours com algo rodando: 2–3 semanas,
-  zero dependência de feature não verificada, e o problema é imediatamente compreensível
-  para qualquer pessoa da Circle — pagamento recorrente é o coração do negócio deles.
-- **Ideia 2** se você quer o maior sinal técnico: é infraestrutura faltante numa direção que
-  a própria Arc está empurrando, e é o tipo de contribuição que costuma converter em cargo
-  de builder, porque outras pessoas passam a construir *em cima* do seu trabalho.
+- **Ideia 2 (avaliadores ERC-8183)** — o que era o maior risco virou o maior trunfo: a
+  implementação de referência já está deployada na testnet e o `createJob` aceita um `hook`,
+  que é exatamente o ponto de extensão que a ideia precisava. Você constrói infraestrutura
+  faltante, numa direção que a própria Arc está empurrando, plugável por terceiros sem fork.
+  É o perfil de contribuição que converte em cargo de builder, porque outras pessoas passam a
+  construir *em cima* do seu trabalho.
+- **Ideia 3 (mandatos de débito recorrente)** — continua a melhor escolha se o objetivo é
+  velocidade: 2–3 semanas, zero dependência de feature não verificada, e o problema é
+  imediatamente compreensível para qualquer pessoa da Circle. Hoje a única forma de cobrança
+  recorrente em crypto é `approve` infinito, o que nenhum CFO aceita.
+- **Ideia 5 (forward de FX)** subiu: oráculos de FX estão documentados na rede, e derivativo
+  de câmbio entre stablecoins é território praticamente vazio.
 
 A Ideia 1 (grid/ladder de FX) é uma terceira opção legítima e é o refinamento defensável do
 seu instinto original — só precisa ser vendida como market making de tesouraria, não como
